@@ -4,6 +4,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  // Helper to get initials from an email (used for avatar)
+  function getInitials(email) {
+    const local = (email || "").split("@")[0] || "";
+    const parts = local.split(/[\.\-_]/).filter(Boolean);
+    if (parts.length === 0) return (local[0] || "").toUpperCase();
+    if (parts.length === 1) return (parts[0][0] || "").toUpperCase();
+    return ((parts[0][0] || "") + (parts[1][0] || "")).toUpperCase();
+  }
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -13,6 +22,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // Clear loading message
       activitiesList.innerHTML = "";
 
+      // Reset and keep the placeholder option to avoid duplicates
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
@@ -20,14 +32,71 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // Build participants section
+        let participantsHTML = '<div class="participants"><h5>Participants</h5>';
+        if (Array.isArray(details.participants) && details.participants.length > 0) {
+          participantsHTML += "<ul>";
+          details.participants.forEach((p) => {
+            const initials = getInitials(p);
+            // Each participant now has a delete button (icon) with data attributes
+            participantsHTML += `
+              <li>
+                <span class="participant-avatar" aria-hidden="true">${initials}</span>
+                <span class="participant-email">${p}</span>
+                <button class="participant-delete" data-activity="${encodeURIComponent(
+                  name
+                )}" data-email="${encodeURIComponent(p)}" title="Unregister">
+                  &times;
+                </button>
+              </li>
+            `;
+          });
+          participantsHTML += "</ul>";
+        } else {
+          participantsHTML += '<p class="empty">No participants yet.</p>';
+        }
+        participantsHTML += "</div>";
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHTML}
         `;
 
         activitiesList.appendChild(activityCard);
+
+          // Attach click handlers for any delete buttons in this card
+          activityCard.querySelectorAll('.participant-delete').forEach((btn) => {
+            btn.addEventListener('click', async (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+
+              const activity = decodeURIComponent(btn.getAttribute('data-activity'));
+              const email = decodeURIComponent(btn.getAttribute('data-email'));
+
+              if (!confirm(`Unregister ${email} from ${activity}?`)) return;
+
+              try {
+                const res = await fetch(`/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(
+                  email
+                )}`, { method: 'POST' });
+
+                const result = await res.json();
+                if (res.ok) {
+                  // Remove the participant element from DOM for immediate feedback
+                  const li = btn.closest('li');
+                  if (li) li.remove();
+                } else {
+                  alert(result.detail || 'Failed to unregister participant');
+                }
+              } catch (err) {
+                console.error('Error unregistering participant:', err);
+                alert('Network error while unregistering participant');
+              }
+            });
+          });
 
         // Add option to select dropdown
         const option = document.createElement("option");
