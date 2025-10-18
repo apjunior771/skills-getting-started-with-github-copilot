@@ -38,10 +38,16 @@ document.addEventListener("DOMContentLoaded", () => {
           participantsHTML += "<ul>";
           details.participants.forEach((p) => {
             const initials = getInitials(p);
+            // Each participant now has a delete button (icon) with data attributes
             participantsHTML += `
               <li>
                 <span class="participant-avatar" aria-hidden="true">${initials}</span>
                 <span class="participant-email">${p}</span>
+                <button class="participant-delete" data-activity="${encodeURIComponent(
+                  name
+                )}" data-email="${encodeURIComponent(p)}" title="Unregister">
+                  &times;
+                </button>
               </li>
             `;
           });
@@ -60,6 +66,37 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
 
         activitiesList.appendChild(activityCard);
+
+          // Attach click handlers for any delete buttons in this card
+          activityCard.querySelectorAll('.participant-delete').forEach((btn) => {
+            btn.addEventListener('click', async (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+
+              const activity = decodeURIComponent(btn.getAttribute('data-activity'));
+              const email = decodeURIComponent(btn.getAttribute('data-email'));
+
+              if (!confirm(`Unregister ${email} from ${activity}?`)) return;
+
+              try {
+                const res = await fetch(`/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(
+                  email
+                )}`, { method: 'POST' });
+
+                const result = await res.json();
+                if (res.ok) {
+                  // Remove the participant element from DOM for immediate feedback
+                  const li = btn.closest('li');
+                  if (li) li.remove();
+                } else {
+                  alert(result.detail || 'Failed to unregister participant');
+                }
+              } catch (err) {
+                console.error('Error unregistering participant:', err);
+                alert('Network error while unregistering participant');
+              }
+            });
+          });
 
         // Add option to select dropdown
         const option = document.createElement("option");
